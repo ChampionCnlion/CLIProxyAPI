@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"net/http"
@@ -20,9 +22,9 @@ import (
 
 // FileTokenStore persists token records and auth metadata using the filesystem as backing storage.
 type FileTokenStore struct {
-	mu      sync.Mutex
 	dirLock sync.RWMutex
 	baseDir string
+	pathMu  [64]sync.Mutex
 }
 
 // NewFileTokenStore creates a token store that saves credentials to disk through the
@@ -58,8 +60,8 @@ func (s *FileTokenStore) Save(ctx context.Context, auth *cliproxyauth.Auth) (str
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	unlock := s.lockPath(path)
+	defer unlock()
 
 	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", fmt.Errorf("auth filestore: create dir failed: %w", err)
@@ -85,7 +87,7 @@ func (s *FileTokenStore) Save(ctx context.Context, auth *cliproxyauth.Auth) (str
 			return "", fmt.Errorf("auth filestore: marshal metadata failed: %w", errMarshal)
 		}
 		if existing, errRead := os.ReadFile(path); errRead == nil {
-			if jsonEqual(existing, raw) {
+			if bytes.Equal(existing, raw) {
 				return path, nil
 			}
 			file, errOpen := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
@@ -164,6 +166,8 @@ func (s *FileTokenStore) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	unlock := s.lockPath(path)
+	defer unlock()
 	if err = os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("auth filestore: delete failed: %w", err)
 	}
@@ -323,6 +327,20 @@ func (s *FileTokenStore) baseDirSnapshot() string {
 	s.dirLock.RLock()
 	defer s.dirLock.RUnlock()
 	return s.baseDir
+}
+
+func (s *FileTokenStore) lockPath(path string) func() {
+	lock := &s.pathMu[fileTokenStorePathLockIndex(path)]
+	lock.Lock()
+	return func() {
+		lock.Unlock()
+	}
+}
+
+func fileTokenStorePathLockIndex(path string) uint32 {
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(path))
+	return hasher.Sum32() % 64
 }
 
 func extractAccessToken(metadata map[string]any) string {

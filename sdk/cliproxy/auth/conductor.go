@@ -176,6 +176,12 @@ type Manager struct {
 	// Auto refresh state
 	refreshCancel context.CancelFunc
 	refreshLoop   *authAutoRefreshLoop
+
+	// Async persistence state for high-frequency runtime updates.
+	persistStartOnce sync.Once
+	persistMu        sync.Mutex
+	persistPending   map[string]*Auth
+	persistWake      chan struct{}
 }
 
 // NewManager constructs a manager with optional custom selector and hook.
@@ -2095,8 +2101,9 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 			}
 		}
 
-		_ = m.persist(ctx, auth)
-		authSnapshot = auth.Clone()
+		persistSnapshot := auth.Clone()
+		authSnapshot = persistSnapshot.Clone()
+		m.enqueuePersist(persistSnapshot)
 	}
 	m.mu.Unlock()
 	if m.scheduler != nil && authSnapshot != nil {
