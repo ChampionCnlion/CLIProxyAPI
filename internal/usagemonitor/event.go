@@ -48,7 +48,12 @@ type Tokens struct {
 }
 
 type Detail struct {
+	RequestID string `json:"request_id,omitempty"`
 	Timestamp string `json:"timestamp"`
+	Provider  string `json:"provider,omitempty"`
+	Method    string `json:"method,omitempty"`
+	Path      string `json:"path,omitempty"`
+	AuthType  string `json:"auth_type,omitempty"`
 	Source    string `json:"source"`
 	AuthIndex string `json:"auth_index,omitempty"`
 	LatencyMS *int64 `json:"latency_ms,omitempty"`
@@ -182,7 +187,12 @@ func BuildPayload(events []Event) Payload {
 			apiEntry.Models[model] = modelEntry
 		}
 		modelEntry.Details = append(modelEntry.Details, Detail{
+			RequestID: event.RequestID,
 			Timestamp: event.Timestamp,
+			Provider:  event.Provider,
+			Method:    event.Method,
+			Path:      event.Path,
+			AuthType:  event.AuthType,
 			Source:    event.Source,
 			AuthIndex: event.AuthIndex,
 			LatencyMS: event.LatencyMS,

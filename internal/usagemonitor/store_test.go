@@ -55,6 +55,10 @@ func TestStoreInsertAndBuildUsagePayload(t *testing.T) {
 	if api == nil || api.Models["gpt-test"] == nil || len(api.Models["gpt-test"].Details) != 1 {
 		t.Fatalf("payload missing model details: %+v", payload.APIs)
 	}
+	detail := api.Models["gpt-test"].Details[0]
+	if detail.RequestID != "req-1" || detail.Provider != "codex" || detail.Method != "POST" || detail.Path != "/v1/chat/completions" {
+		t.Fatalf("detail metadata = %+v, want request/provider/method/path", detail)
+	}
 }
 
 func TestServiceHandleUsagePersistsThroughBatchWriter(t *testing.T) {
