@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	serviceID         = "cliproxyapi-usage"
+	serviceID         = "cpa-manager"
 	defaultQueryLimit = 50000
 	defaultBatchSize  = 100
 	flushInterval     = 500 * time.Millisecond
@@ -45,12 +45,19 @@ type StatusResponse struct {
 	Collector   CollectorStatus `json:"collector"`
 }
 
+type InfoResponse struct {
+	Service   string `json:"service"`
+	Mode      string `json:"mode"`
+	StartedAt int64  `json:"startedAt"`
+}
+
 type Service struct {
 	mu         sync.RWMutex
 	store      *Store
 	dbPath     string
 	queryLimit int
 	enabled    bool
+	startedAt  int64
 	status     CollectorStatus
 	events     chan Event
 	startOnce  sync.Once
@@ -64,6 +71,7 @@ var (
 func newService() *Service {
 	return &Service{
 		queryLimit: defaultQueryLimit,
+		startedAt:  time.Now().UnixMilli(),
 		events:     make(chan Event, 4096),
 		status: CollectorStatus{
 			Collector: "stopped",
@@ -299,6 +307,20 @@ func (s *Service) markError(stage string, err error) {
 	defer s.mu.Unlock()
 	s.status.Collector = "error"
 	s.status.LastError = stage + ": " + err.Error()
+}
+
+func (s *Service) Info() (InfoResponse, error) {
+	if s == nil {
+		return InfoResponse{}, errors.New("usage monitor is not configured")
+	}
+	s.mu.RLock()
+	startedAt := s.startedAt
+	s.mu.RUnlock()
+	return InfoResponse{
+		Service:   serviceID,
+		Mode:      "embedded",
+		StartedAt: startedAt,
+	}, nil
 }
 
 func (s *Service) Status(ctx context.Context) (StatusResponse, error) {

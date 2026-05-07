@@ -85,6 +85,36 @@ func TestHealthz(t *testing.T) {
 	})
 }
 
+func TestUsageServiceInfoCompatibility(t *testing.T) {
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/usage-service/info", nil)
+	rr := httptest.NewRecorder()
+	server.engine.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		Service   string `json:"service"`
+		Mode      string `json:"mode"`
+		StartedAt int64  `json:"startedAt"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response JSON: %v; body=%s", err, rr.Body.String())
+	}
+	if resp.Service != "cpa-manager" {
+		t.Fatalf("service = %q, want %q", resp.Service, "cpa-manager")
+	}
+	if resp.Mode != "embedded" {
+		t.Fatalf("mode = %q, want %q", resp.Mode, "embedded")
+	}
+	if resp.StartedAt <= 0 {
+		t.Fatalf("startedAt = %d, want positive", resp.StartedAt)
+	}
+}
+
 func TestManagementUsageRequiresManagementAuthAndPopsArray(t *testing.T) {
 	t.Setenv("MANAGEMENT_PASSWORD", "test-management-key")
 

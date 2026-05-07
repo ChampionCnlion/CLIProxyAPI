@@ -21,7 +21,21 @@ type modelPricesSyncRequest struct {
 }
 
 func (s *Server) handleUsageHealth(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"ok": true, "service": "cliproxyapi-usage"})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "service": "cpa-manager"})
+}
+
+func (s *Server) handleUsageServiceInfo(c *gin.Context) {
+	monitor := s.usageMonitor
+	if monitor == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage monitor is not configured"})
+		return
+	}
+	info, err := monitor.Info()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, info)
 }
 
 func (s *Server) handleUsageStatus(c *gin.Context) {

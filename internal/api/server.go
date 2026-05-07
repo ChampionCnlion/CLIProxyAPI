@@ -349,6 +349,7 @@ func (s *Server) setupRoutes() {
 	s.engine.GET("/healthz", healthzHandler)
 	s.engine.HEAD("/healthz", healthzHandler)
 	s.engine.GET("/health", s.handleUsageHealth)
+	s.engine.GET("/usage-service/info", s.handleUsageServiceInfo)
 	s.engine.GET("/status", s.managementAvailabilityMiddleware(), s.mgmt.Middleware(), s.handleUsageStatus)
 	s.engine.GET("/usage", s.serveUsagePanel)
 	s.engine.GET("/usage/", s.serveUsagePanel)
