@@ -42,6 +42,12 @@ func BuildConfigChangeDetails(oldCfg, newCfg *config.Config) []string {
 	if oldCfg.RedisUsageQueueRetentionSeconds != newCfg.RedisUsageQueueRetentionSeconds {
 		changes = append(changes, fmt.Sprintf("redis-usage-queue-retention-seconds: %d -> %d", oldCfg.RedisUsageQueueRetentionSeconds, newCfg.RedisUsageQueueRetentionSeconds))
 	}
+	if strings.TrimSpace(oldCfg.UsageDBPath) != strings.TrimSpace(newCfg.UsageDBPath) {
+		changes = append(changes, fmt.Sprintf("usage-db-path: %s -> %s", strings.TrimSpace(oldCfg.UsageDBPath), strings.TrimSpace(newCfg.UsageDBPath)))
+	}
+	if oldCfg.UsageQueryLimit != newCfg.UsageQueryLimit {
+		changes = append(changes, fmt.Sprintf("usage-query-limit: %d -> %d", oldCfg.UsageQueryLimit, newCfg.UsageQueryLimit))
+	}
 	if oldCfg.DisableCooling != newCfg.DisableCooling {
 		changes = append(changes, fmt.Sprintf("disable-cooling: %t -> %t", oldCfg.DisableCooling, newCfg.DisableCooling))
 	}

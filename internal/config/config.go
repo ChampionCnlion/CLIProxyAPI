@@ -70,6 +70,14 @@ type Config struct {
 	// Default: 60. Max: 3600.
 	RedisUsageQueueRetentionSeconds int `yaml:"redis-usage-queue-retention-seconds" json:"redis-usage-queue-retention-seconds"`
 
+	// UsageDBPath stores persisted usage events for the built-in request monitor.
+	// When empty, usage.sqlite is created next to config.yaml.
+	UsageDBPath string `yaml:"usage-db-path" json:"usage-db-path"`
+
+	// UsageQueryLimit caps the number of recent persisted usage events returned
+	// by /v0/management/usage. Default: 50000.
+	UsageQueryLimit int `yaml:"usage-query-limit" json:"usage-query-limit"`
+
 	// DisableCooling disables quota cooldown scheduling when true.
 	DisableCooling bool `yaml:"disable-cooling" json:"disable-cooling"`
 
@@ -615,6 +623,7 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	cfg.ErrorLogsMaxFiles = 10
 	cfg.UsageStatisticsEnabled = false
 	cfg.RedisUsageQueueRetentionSeconds = 60
+	cfg.UsageQueryLimit = 50000
 	cfg.DisableCooling = false
 	cfg.DisableImageGeneration = DisableImageGenerationOff
 	cfg.Pprof.Enable = false
@@ -682,6 +691,10 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	} else if cfg.RedisUsageQueueRetentionSeconds > 3600 {
 		log.WithField("value", cfg.RedisUsageQueueRetentionSeconds).Warn("redis-usage-queue-retention-seconds too large; clamping to 3600")
 		cfg.RedisUsageQueueRetentionSeconds = 3600
+	}
+
+	if cfg.UsageQueryLimit <= 0 {
+		cfg.UsageQueryLimit = 50000
 	}
 
 	if cfg.MaxRetryCredentials < 0 {

@@ -31,6 +31,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/managementasset"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/redisqueue"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/usagemonitor"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v6/sdk/access"
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/api/handlers"
@@ -168,6 +169,9 @@ type Server struct {
 	// management handler
 	mgmt *managementHandlers.Handler
 
+	// usageMonitor persists usage records and serves request-monitoring APIs.
+	usageMonitor *usagemonitor.Service
+
 	// ampModule is the Amp routing module for model mapping hot-reload
 	ampModule *ampmodule.AmpModule
 
@@ -248,6 +252,10 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 	envAdminPassword, envAdminPasswordSet := os.LookupEnv("MANAGEMENT_PASSWORD")
 	envAdminPassword = strings.TrimSpace(envAdminPassword)
 	envManagementSecret := envAdminPasswordSet && envAdminPassword != ""
+	usageMonitor, errUsageMonitor := usagemonitor.Configure(cfg, configFilePath)
+	if errUsageMonitor != nil {
+		log.WithError(errUsageMonitor).Error("failed to initialize built-in usage monitor")
+	}
 
 	// Create server instance
 	s := &Server{
@@ -257,6 +265,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		accessManager:       accessManager,
 		requestLogger:       requestLogger,
 		loggerToggle:        toggle,
+		usageMonitor:        usageMonitor,
 		configFilePath:      configFilePath,
 		currentPath:         wd,
 		envManagementSecret: envManagementSecret,
@@ -339,6 +348,11 @@ func (s *Server) setupRoutes() {
 	}
 	s.engine.GET("/healthz", healthzHandler)
 	s.engine.HEAD("/healthz", healthzHandler)
+	s.engine.GET("/health", s.handleUsageHealth)
+	s.engine.GET("/status", s.managementAvailabilityMiddleware(), s.mgmt.Middleware(), s.handleUsageStatus)
+	s.engine.GET("/usage", s.serveUsagePanel)
+	s.engine.GET("/usage/", s.serveUsagePanel)
+	s.engine.GET("/usage/management.html", s.serveUsagePanel)
 
 	s.engine.GET("/management.html", s.serveManagementControlPanel)
 	openaiHandlers := openai.NewOpenAIAPIHandler(s.handlers)
@@ -552,6 +566,12 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.DELETE("/api-keys", s.mgmt.DeleteAPIKeys)
 		mgmt.GET("/api-key-usage", s.mgmt.GetAPIKeyUsage)
 		mgmt.GET("/usage-queue", s.mgmt.GetUsageQueue)
+		mgmt.GET("/usage", s.handleManagementUsage)
+		mgmt.GET("/usage/export", s.handleManagementUsage)
+		mgmt.POST("/usage/import", s.handleManagementUsage)
+		mgmt.GET("/model-prices", s.handleManagementModelPrices)
+		mgmt.PUT("/model-prices", s.handleManagementModelPrices)
+		mgmt.POST("/model-prices/sync", s.handleManagementModelPrices)
 
 		mgmt.GET("/gemini-api-key", s.mgmt.GetGeminiKeys)
 		mgmt.PUT("/gemini-api-key", s.mgmt.PutGeminiKeys)
@@ -1003,6 +1023,17 @@ func (s *Server) UpdateClients(cfg *config.Config) {
 
 	if oldCfg == nil || oldCfg.RedisUsageQueueRetentionSeconds != cfg.RedisUsageQueueRetentionSeconds {
 		redisqueue.SetRetentionSeconds(cfg.RedisUsageQueueRetentionSeconds)
+	}
+
+	if s.usageMonitor != nil && (oldCfg == nil ||
+		oldCfg.UsageStatisticsEnabled != cfg.UsageStatisticsEnabled ||
+		oldCfg.UsageDBPath != cfg.UsageDBPath ||
+		oldCfg.UsageQueryLimit != cfg.UsageQueryLimit) {
+		if monitor, errUsageMonitor := usagemonitor.Configure(cfg, s.configFilePath); errUsageMonitor != nil {
+			log.WithError(errUsageMonitor).Error("failed to reconfigure built-in usage monitor")
+		} else {
+			s.usageMonitor = monitor
+		}
 	}
 
 	if s.requestLogger != nil && (oldCfg == nil || oldCfg.ErrorLogsMaxFiles != cfg.ErrorLogsMaxFiles) {
