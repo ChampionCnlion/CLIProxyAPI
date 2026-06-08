@@ -36,3 +36,28 @@ func TestAuthenticateManagementKey_LocalhostIPBan_BlocksCorrectKeyDuringBan(t *t
 		t.Fatalf("unexpected banned message: %q", errMsg)
 	}
 }
+
+func TestAuthenticateManagementKey_DisableAuthBan_DoesNotBlockCorrectKey(t *testing.T) {
+	h := &Handler{
+		cfg: &config.Config{
+			RemoteManagement: config.RemoteManagement{DisableAuthBan: true},
+		},
+		failedAttempts: make(map[string]*attemptInfo),
+		envSecret:      "test-secret",
+	}
+
+	for i := 0; i < 10; i++ {
+		allowed, statusCode, errMsg := h.AuthenticateManagementKey("127.0.0.1", true, "wrong-secret")
+		if allowed {
+			t.Fatalf("expected auth to be denied at attempt %d", i+1)
+		}
+		if statusCode != http.StatusUnauthorized || errMsg != "invalid management key" {
+			t.Fatalf("unexpected auth failure at attempt %d: status=%d msg=%q", i+1, statusCode, errMsg)
+		}
+	}
+
+	allowed, statusCode, errMsg := h.AuthenticateManagementKey("127.0.0.1", true, "test-secret")
+	if !allowed {
+		t.Fatalf("expected correct key to be allowed when auth ban is disabled: status=%d msg=%q", statusCode, errMsg)
+	}
+}
